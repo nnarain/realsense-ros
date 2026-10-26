@@ -163,7 +163,7 @@ void BaseRealSenseNode::setAvailableSensors()
     std::function<void(rs2::frame)> imu_callback_function = [this](rs2::frame frame){
         imu_callback(frame);
         if (_imu_sync_method != imu_sync_method::NONE)
-            imu_callback_sync(frame);
+            imu_callback_sync(frame, _imu_sync_method);
     };
 
     std::function<void(rs2::frame)> multiple_message_callback_function = [this](rs2::frame frame){multiple_message_callback(frame, _imu_sync_method);};
@@ -267,10 +267,13 @@ void BaseRealSenseNode::startPublishers(const std::vector<stream_profile>& profi
 
             if (profile.stream_type() == RS2_STREAM_OCCUPANCY)
             {
-                // special handling for occupancy stream, since it is a topic of nav_msgs/msg/GridCells messages
+                // special handling for occupancy stream, since it is a topic of nav_msgs/msg/OccupancyGrid messages
                 // and not a normal image publisher
-                 _occupancy_publisher = _node.create_publisher<nav_msgs::msg::GridCells>("~/occupancy",
+                 _occupancy_publisher = _node.create_publisher<nav_msgs::msg::OccupancyGrid>("~/occupancy",
                     rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos),qos));
+                 _occupancy_certainty_publisher = _node.create_publisher<nav_msgs::msg::OccupancyGrid>(
+                    "~/occupancy_certainty",
+                    rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(qos), qos));
             }
             else if(profile.stream_type() == RS2_STREAM_LABELED_POINT_CLOUD)
             {

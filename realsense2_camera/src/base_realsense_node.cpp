@@ -27,6 +27,7 @@
 #include <tf2_ros/qos.hpp>
 #include "pointcloud_filter.h"
 #include "align_depth_filter.h"
+#include "occupancy_grid_utils.h"
 
 using namespace realsense2_camera;
 
@@ -104,6 +105,7 @@ BaseRealSenseNode::BaseRealSenseNode(RosNodeBase& node,
     _json_file_path(""),
     _depth_scale_meters(0),
     _clipping_distance(0),
+    _occupancy_occupied_threshold(100),
     _linear_accel_cov(0),
     _angular_velocity_cov(0),
     _hold_back_imu_for_frames(false),
@@ -917,46 +919,271 @@ bool BaseRealSenseNode::shouldPublishCameraInfo(const stream_index_pair& sip)
     return (stream != RS2_STREAM_SAFETY && stream != RS2_STREAM_OCCUPANCY && stream != RS2_STREAM_LABELED_POINT_CLOUD);
 }
 
-void BaseRealSenseNode::publishOccupancyFrame(rs2::frame f, const rclcpp::Time& t)
+bool BaseRealSenseNode::tryPublishPurePayloadOccupancy(const rs2::frame& f,
+                                                       const uint8_t* raw_data, size_t raw_size,
+                                                       const rclcpp::Time& t,
+                                                       bool occ_wanted, bool cert_wanted)
 {
-    if(!_occupancy_publisher || 0 == _occupancy_publisher->get_subscription_count())
-        return;
-
-    ROS_DEBUG("Publishing Occupancy GridCells Frame");
-
-    // get frame bytes and frame metadata relevant info
-    auto frame_as_uint8_arr = (uint8_t*)f.get_data();
-    auto cols = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_COLUMNS)); // grid cells width
-    auto rows = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ROWS)); // grid cells height
-    auto cell_size = static_cast<float>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_CELL_SIZE) / 100.0f); // convert to meters
-
-    // create GridCells msg and start filling it
-    nav_msgs::msg::GridCells msg;
-    msg.header.stamp = t;
-    msg.header.frame_id = FRAME_ID(OCCUPANCY);
-    msg.cell_width = cell_size;
-    msg.cell_height = cell_size;
-
-    for (auto i = 0; i < cols * rows; ++i)
+    // Pure-payload occupancy (RSDEV-14426: FW >= 7.58.46375 + librealsense#15691). The
+    // wire frame is a bare signed-cell grid with NO header - geometry and signed origin
+    // travel in the UVC metadata ABI instead of a MAP1 sub-header. Cells arrive already
+    // in nav_msgs row-major order (data[y*width + x], +X forward along columns, +Y left),
+    // copied straight through with no fw_row/fw_col flip (unlike the D585S byte-legacy
+    // path). Require every metadata field this path reads: get_frame_metadata() throws
+    // when a field is unsupported, so a frame that advertises the origin but is missing
+    // any of the others must fall through (return false) to the caller's metadata-missing
+    // guard rather than throwing out of the frame callback.
+    if (!f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ORIGIN_X) ||
+        !f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ORIGIN_Y) ||
+        !f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_COLUMNS) ||
+        !f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ROWS) ||
+        !f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_CELL_SIZE))
     {
-        // AICV algo is packing each 8 cells into one byte. Each byte include 8 bits <--> 8 cells
-        // The rightest bit (LSB) inside the packed byte from AICV algo represnts the closest cell we want to work with in the grid.
-        // e.g. Original Occupancy Cells: 0 0 1 1 0 0 1 0 ---> AICV packing algo ---> 01001100 (not the opposite order)
-        // In this if we check if current cell is occupied.
-        // Note that we start working from the most left bit, aka, the farest point of the grid.
-        if ((frame_as_uint8_arr[i / 8U] & (1U << i % 8)) != 0)
+        return false;
+    }
+
+    const auto cols = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_COLUMNS));
+    const auto rows = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ROWS));
+    const auto cell_size_cm = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_CELL_SIZE));
+    const auto origin_x_mm = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ORIGIN_X));
+    const auto origin_y_mm = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ORIGIN_Y));
+
+    // Validate the device-reported geometry and convert units (see occupancy_grid_utils.h).
+    occupancy::Geometry geo;
+    switch (occupancy::computeGeometry(cols, rows, cell_size_cm, origin_x_mm, origin_y_mm, raw_size, geo))
+    {
+    case occupancy::GeometryStatus::Ok:
+        break;
+    case occupancy::GeometryStatus::NonPositiveDims:
+        RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                             "Occupancy frame reported %dx%d cells - dropped", cols, rows);
+        return true;
+    case occupancy::GeometryStatus::SizeOverflow:
+        RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                             "Occupancy frame geometry %dx%d overflows size_t - dropped", cols, rows);
+        return true;
+    case occupancy::GeometryStatus::PayloadTooSmall:
+        RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                             "Occupancy pure payload (%zu bytes) smaller than %dx%d grid - dropped",
+                             raw_size, cols, rows);
+        return true;
+    case occupancy::GeometryStatus::NonPositiveCellSize:
+        RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                             "Occupancy frame reported cell size %d cm - dropped", cell_size_cm);
+        return true;
+    }
+
+    // Payload integrity: the FW reports a CRC-32/ISO-HDLC over the whole payload in the
+    // metadata (the MAP1 header used to carry it). Verify it when present and drop a
+    // corrupted frame; skip the check when the metadata doesn't carry a CRC.
+    if (f.supports_frame_metadata(RS2_FRAME_METADATA_CRC))
+    {
+        const auto expected = static_cast<uint32_t>(f.get_frame_metadata(RS2_FRAME_METADATA_CRC));
+        const uint32_t actual = occupancy::crc32IsoHdlc(raw_data, raw_size);
+        if (actual != expected)
         {
-            // Find x,y,z positions of current index
-            // Remember, in ROS CS: (X: Forward, Y: Left, Z: Up)
-            geometry_msgs::msg::Point p3d;
-            uint32_t row = (i / cols);
-            uint32_t col = (i % cols);
-            p3d.x = (cell_size * static_cast<float>(rows)) - cell_size * (static_cast<float>(row) + 0.5f);
-            p3d.y = (cell_size * static_cast<float>(cols)) / 2 - cell_size * (static_cast<float>(col) + 0.5f);
-            p3d.z = 0;
-            msg.cells.push_back(p3d);
+            RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                                 "Occupancy payload CRC mismatch (got 0x%08x, expected 0x%08x) - dropped",
+                                 actual, expected);
+            return true;
         }
     }
+
+    nav_msgs::msg::OccupancyGrid msg;
+    msg.header.stamp = t;
+    msg.header.frame_id = FRAME_ID(OCCUPANCY);
+    msg.info.map_load_time = t;
+    msg.info.resolution = geo.resolution_m;
+    msg.info.width  = geo.width;    // columns = cells along +X (forward)
+    msg.info.height = geo.height;   // rows    = cells along +Y (left)
+    msg.info.origin.position.x = geo.origin_x_m;
+    msg.info.origin.position.y = geo.origin_y_m;
+    msg.info.origin.position.z = 0.0;
+    msg.info.origin.orientation.w = 1.0;
+
+    nav_msgs::msg::OccupancyGrid certainty_msg;
+    certainty_msg.header = msg.header;
+    certainty_msg.info = msg.info;
+
+    // Cells are already in nav_msgs order - copy straight through (no axis flip).
+    occupancy::splitCells(reinterpret_cast<const int8_t*>(raw_data), geo.n,
+                          static_cast<int8_t>(_occupancy_occupied_threshold),
+                          msg.data, certainty_msg.data);
+
+    if (occ_wanted)
+        _occupancy_publisher->publish(msg);
+    if (cert_wanted)
+        _occupancy_certainty_publisher->publish(certainty_msg);
+    return true;
+}
+
+void BaseRealSenseNode::publishOccupancyFrame(rs2::frame f, const rclcpp::Time& t)
+{
+    const bool occ_wanted = _occupancy_publisher && 0 != _occupancy_publisher->get_subscription_count();
+    const bool cert_wanted = _occupancy_certainty_publisher &&
+                             0 != _occupancy_certainty_publisher->get_subscription_count();
+    if (!occ_wanted && !cert_wanted)
+        return;
+
+    auto* raw_data = static_cast<const uint8_t*>(f.get_data());
+    const size_t raw_size = static_cast<size_t>(f.get_data_size());
+    if (raw_data == nullptr)
+    {
+        return;   // no payload to read - guards the pure-payload and legacy paths below
+    }
+
+    // Pure-payload occupancy (RSDEV-14426): a bare signed-cell grid whose geometry and
+    // signed origin travel in the UVC metadata ABI. Handled in its own helper; returns
+    // false (falling through to the metadata-missing guard and legacy paths below) when
+    // the frame does not carry the full pure-payload metadata set.
+    if (tryPublishPurePayloadOccupancy(f, raw_data, raw_size, t, occ_wanted, cert_wanted))
+        return;
+
+    // Both the pure-payload path above and the legacy path below need the grid
+    // geometry from occupancy metadata. If the device/driver delivers no occupancy
+    // metadata at all - e.g. an unpatched uvcvideo on Linux that drops the vendor
+    // metadata blob - get_frame_metadata() below would throw on every frame. Emit a
+    // throttled error and drop the frame instead of throwing/spamming per frame.
+    if (!f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_COLUMNS) ||
+        !f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ROWS) ||
+        !f.supports_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_CELL_SIZE))
+    {
+        RCLCPP_ERROR_THROTTLE(_logger, *_node.get_clock(), 5000,
+            "Occupancy frames carry no grid metadata (columns/rows/cell-size), so occupancy cannot "
+            "be published. On Linux this usually means uvcvideo is not metadata-patched - "
+            "install librealsense2-dkms (or a metadata-capable kernel). Occupancy frames "
+            "will keep being dropped until metadata is available.");
+        return;
+    }
+
+    // Per-frame trace, kept at DEBUG (off by default) but throttled so it does not
+    // log every frame even when debug logging is enabled, matching the MAP1 path.
+    RCLCPP_DEBUG_THROTTLE(_logger, *_node.get_clock(), 5000, "Publishing Occupancy Grid Frame (legacy path)");
+
+    auto cols = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_COLUMNS));
+    auto rows = static_cast<int>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_GRID_ROWS));
+    auto cell_size = static_cast<float>(f.get_frame_metadata(RS2_FRAME_METADATA_OCCUPANCY_CELL_SIZE)) / 100.0f; // cm -> m
+    if (rows <= 0 || cols <= 0)
+    {
+        // Guard the geometry before it is used: a zero or negative rows/cols would
+        // otherwise size the grid below (or wrap when cast to size_t) and publish an
+        // empty/garbage grid; drop the frame instead.
+        RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                             "Occupancy frame reported %dx%d cells - dropped", rows, cols);
+        return;
+    }
+    // rows, cols are positive but device-controlled int metadata (the legacy path,
+    // unlike MAP1, does not cap them at 0xFFFF), so on a 32-bit size_t their product
+    // can wrap. Reject that before a wrapped n under-sizes nav_cells / msg.data while
+    // the loops below still index the full rows*cols geometry.
+    if (static_cast<size_t>(rows) > SIZE_MAX / static_cast<size_t>(cols))
+    {
+        RCLCPP_WARN_THROTTLE(_logger, *_node.get_clock(), 5000,
+                             "Occupancy frame geometry %dx%d overflows size_t - dropped", rows, cols);
+        return;
+    }
+    const size_t n = static_cast<size_t>(rows) * static_cast<size_t>(cols);
+
+    nav_msgs::msg::OccupancyGrid msg;
+    msg.header.stamp = t;
+    msg.header.frame_id = FRAME_ID(OCCUPANCY);
+
+    // Axes follow ROS convention (X: forward, Y: left):
+    //   width  = cells along X = firmware rows
+    //   height = cells along Y = firmware cols
+    // Origin is the corner of cell (0,0): nearest boundary in X, rightmost in Y.
+    // The grid is symmetric about the camera axis, so the right boundary is at
+    // y = -cols/2 cells regardless of parity; the per-cell y below uses the
+    // same convention.
+    msg.info.map_load_time = t;
+    msg.info.resolution = cell_size;
+    msg.info.width  = static_cast<uint32_t>(rows);
+    msg.info.height = static_cast<uint32_t>(cols);
+    msg.info.origin.position.x = 0.0;
+    msg.info.origin.position.y = -cell_size * static_cast<float>(cols) * 0.5f;
+    msg.info.origin.position.z = 0.0;
+    msg.info.origin.orientation.w = 1.0;
+
+    const auto width = msg.info.width;
+
+    // Size sniff: new D585S FW streams one signed byte per cell (byte-legacy,
+    // -1/0/1..100 - carries the same certainty ladder as MAP1, just without the
+    // self-describing header); older FW still streams a plain 1-bit grid
+    // (bit-legacy, occupied/free only). Both firmware layouts share the same
+    // fw_row/fw_col double axis flip below; only the source element width differs.
+    // The byte/bit discrimination relies on the transport reporting the exact payload
+    // size: a byte grid is n bytes, a bit grid ceil(n/8) < n. A bit frame delivered in an
+    // over-allocated (>= n) buffer would be misread here as byte-legacy.
+    if (raw_size >= n)
+    {
+        // Byte-legacy: certainty is available here too, unlike the bit path.
+        const int8_t* fw_cells = reinterpret_cast<const int8_t*>(raw_data);
+        std::vector<int8_t> nav_cells(n);
+        for (int fw_row = 0; fw_row < rows; ++fw_row)
+        {
+            for (int fw_col = 0; fw_col < cols; ++fw_col)
+            {
+                // size_t index math (not int rows*cols) on BOTH source and destination
+                // so device-supplied geometry cannot overflow the product before indexing,
+                // matching the bit-legacy path below.
+                const size_t src_idx = static_cast<size_t>(fw_row) * static_cast<size_t>(cols) + fw_col;
+                const uint32_t og_col_idx = width - 1u - static_cast<uint32_t>(fw_row);
+                const uint32_t og_row_idx = static_cast<uint32_t>(cols) - 1u - static_cast<uint32_t>(fw_col);
+                const size_t dst_idx = static_cast<size_t>(og_row_idx) * width + og_col_idx;
+                nav_cells[dst_idx] = fw_cells[src_idx];
+            }
+        }
+
+        nav_msgs::msg::OccupancyGrid certainty_msg;
+        certainty_msg.header = msg.header;
+        certainty_msg.info = msg.info;
+        occupancy::splitCells(nav_cells.data(), n,
+                              static_cast<int8_t>(_occupancy_occupied_threshold),
+                              msg.data, certainty_msg.data);
+
+        if (occ_wanted)
+            _occupancy_publisher->publish(msg);
+        if (cert_wanted)
+            _occupancy_certainty_publisher->publish(certainty_msg);
+        return;
+    }
+
+    // Legacy 1-bit grids never publish certainty - nothing to do if only
+    // ~/occupancy_certainty has subscribers.
+    if (!occ_wanted)
+        return;
+
+    // Overflow-safe ceiling division: n + 7 could wrap size_t near its max (n is
+    // bounded by the guard above, but only to <= SIZE_MAX), so compute ceil(n/8)
+    // without ever forming n + 7.
+    const size_t bit_bytes = (n / 8u) + ((n % 8u != 0u) ? 1u : 0u);
+    if (raw_size < bit_bytes)
+    {
+        ROS_WARN("Legacy occupancy frame smaller than its declared grid - dropped");
+        return;
+    }
+
+    // Legacy 1-bit grids carry occupancy only; the unknown/shadow semantics
+    // moved into the camera (MapGridBuilder) and are not reconstructed here.
+    // Index math uses size_t (not int rows*cols) on both source and destination so
+    // device-supplied geometry cannot overflow the product, matching the byte path above.
+    msg.data.assign(n, 0);
+    for (int fw_row = 0; fw_row < rows; ++fw_row)
+    {
+        for (int fw_col = 0; fw_col < cols; ++fw_col)
+        {
+            const size_t i = static_cast<size_t>(fw_row) * static_cast<size_t>(cols) + fw_col;
+            if ((raw_data[i / 8U] & (1U << (i % 8U))) != 0)
+            {
+                const uint32_t og_col_idx = width - 1u - static_cast<uint32_t>(fw_row);
+                const uint32_t og_row_idx = static_cast<uint32_t>(cols) - 1u - static_cast<uint32_t>(fw_col);
+                const size_t dst_idx = static_cast<size_t>(og_row_idx) * width + og_col_idx;
+                msg.data[dst_idx] = 100;
+            }
+        }
+    }
+
+    // occ_wanted was checked (and returned on) above - always true here.
     _occupancy_publisher->publish(msg);
 }
 

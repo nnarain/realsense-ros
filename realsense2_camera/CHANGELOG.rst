@@ -2,67 +2,228 @@
 Changelog for package realsense2_camera
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-4.57.8 (2026-03-27)
+4.59.1 (2026-10-11)
 -------------------
+* Push 4.59.1 release into ros2-master (`#3574 <https://github.com/realsenseai/realsense-ros/issues/3574>`_)
+* Push 4.59.1 release into ros2-master
+* Freeze 4.59.1: bump version (`#3563 <https://github.com/realsenseai/realsense-ros/issues/3563>`_)
+* Update version to 4.59.1
+* Enable only the streams the device tags as default (`#3561 <https://github.com/realsenseai/realsense-ros/issues/3561>`_)
+* Enable only the streams the device tags as default
+* Skip rosbag tests when the installed librealsense2 cannot play compressed db3 (`#3558 <https://github.com/realsenseai/realsense-ros/issues/3558>`_)
+* Address review: exempt SDK-independent tests, drop the size filter, log the skip
+* Close the maps handle explicitly
+* Resolve librealsense2 through the loader, not the ldconfig cache
+* Trim the compressed-db3 probe
+* Skip rosbag tests when the installed librealsense2 cannot play compressed db3
+* Merge branch 'ros2-development' into issue-templates
+* Occupancy: publish camera-computed grid + ~/occupancy_certainty; remove host-side raycasting (`#3555 <https://github.com/realsenseai/realsense-ros/issues/3555>`_)
+* feat(occupancy): parse self-describing MAP1 in-node; add ~/occupancy_certainty
+* Migrate rosbag tests to db3 and deflake align_depth (`#3539 <https://github.com/realsenseai/realsense-ros/issues/3539>`_)
+* Default all streams of an untagged sensor to one shared frame rate (`#3556 <https://github.com/realsenseai/realsense-ros/issues/3556>`_)
+* Log the frame rate the fallback picked
+* Confine the shared frame rate fallback to motion streams
+* Say which frame rate the fallback picked
+* Default all streams of an untagged sensor to one shared frame rate
+* turn the FATAL_ERROR for ROS distro check into a WARNING (`#3550 <https://github.com/realsenseai/realsense-ros/issues/3550>`_)
+* remove emoji from status message
+* remove trailing whitespace
+* always add 'ros_param_backend.cpp' to the sources
+* turn the FATAL_ERROR for ROS distro check into a WARNING
+* Contributors: Avia Avraham, Christian Rauch, Nir Azkiel, Niv Goren, Ohad Meir
 
-4.57.7 (2026-03-24)
+4.58.4 (2026-08-30)
 -------------------
-* add release noted
-* Update package.xml
-* Update package.xml
-* Update constants.h
-* PR `#3485 <https://github.com/IntelRealSense/realsense-ros/issues/3485>`_ from Nir-Az: Fix GHA flow
-* install missing packages
-* PR `#3475 <https://github.com/IntelRealSense/realsense-ros/issues/3475>`_ from remibettan: find package set to last major release version
-* find package set to lrs prev major version 2
-* PR `#3474 <https://github.com/IntelRealSense/realsense-ros/issues/3474>`_ from remibettan: find package set to lrs prev major version
-* find package set to lrs prev major version
-* PR `#3462 <https://github.com/IntelRealSense/realsense-ros/issues/3462>`_ from remibettan: intel removed and github user changed
-* undoing the change in copyright, fixing bagfiles links
-* PR `#3468 <https://github.com/IntelRealSense/realsense-ros/issues/3468>`_ from remibettan: using legacy libraries for foxy
-* using legacy libraries for foxy
-* code review corrections
-* many intel removed and github user changed
-* PR `#3450 <https://github.com/IntelRealSense/realsense-ros/issues/3450>`_ from Nir-Az: update to realsenseai
-* update to realsenseai
-* PR `#3448 <https://github.com/IntelRealSense/realsense-ros/issues/3448>`_ from OhadMeir: Add motion_fps to launch file
-* Add motion_fps to launch file
-* PR `#3442 <https://github.com/IntelRealSense/realsense-ros/issues/3442>`_ from remibettan/restore-minor-version-to-0: minor versions back to 0
-* minor back to 0 - leftovers
-* minor back to 0
-* PR `#3441 <https://github.com/IntelRealSense/realsense-ros/issues/3441>`_ from remibettan/ros2-development: merging 4.57.3 to ros2-development
-* Merge tag '4.57.3' into ros2-development
-* PR `#3437 <https://github.com/IntelRealSense/realsense-ros/issues/3437>`_ from Gilaadb: bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
-* bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
-* Contributors: Gilad Bretter, Nir Azkiel, OhadMeir, Remi Bettan, remibettan
+* Update changelogs for 4.58.4
+* Freeze 4.58.4: bump version (`#3548 <https://github.com/realsenseai/realsense-ros/issues/3548>`_)
+* Update version to 4.58.4
+* Merge branch 'ros2-development' into ileniap/add/use-mesh/d455
+* Merge branch 'ros2-development' into patch-1
+* push ros2-master to ros2-development (`#3543 <https://github.com/realsenseai/realsense-ros/issues/3543>`_)
+* reset dev versions
+* Merge remote-tracking branch 'origin/ros2-master' into ros2-development
+* Ngoren/occupancy gridcells fix (`#3536 <https://github.com/realsenseai/realsense-ros/issues/3536>`_)
+* fix(occupancy): symmetric grid centering and review cleanups
+  - Center the grid about the camera axis with float cols/2 in both
+  origin.y and the per-cell y: the integer division shifted odd-column
+  grids (D585S emits 85 cols) half a cell laterally. Verified live:
+  origin.y now -2.975 and the grid aligns with the point cloud.
+  - Reject depth intrinsics with zero width, which would otherwise
+  publish a silent all-unknown grid.
+  - Stop the row scan at occupancy_max_range instead of skipping rows.
+  - Drop the unreachable bin < 0 guard, document why it cannot trigger.
+  - Rename bin_range to fov_span: it is the total FOV window, not the
+  width of one bin.
+  - Document occupancy_max_range in the README next to clip_distance.
+* occupancy: require depth intrinsics, drop no-FOV fallback
+* docs(occupancy): tighten comments
+* refine(occupancy): odd-column origin consistency, near-range spread guard, cast and perf cleanups
+* feat(occupancy): replace GridCells with OccupancyGrid, angular raycasting, FOV masking and max-range clipping
+  - Switch occupancy publisher from nav_msgs/GridCells to nav_msgs/OccupancyGrid
+  - Cell semantics: 0=free, 100=occupied, -1=unknown (was all-zero before)
+  - FOV masking: cells outside horizontal FOV cone (from depth camera fx) → -1
+  - True angular raycasting via θ=atan2(y,x) instead of fixed-Y column scan
+  - Shadow propagation: free until first obstacle, unknown behind it per ray
+  - Gap-ray fix: obstacle shadow spread across full angular footprint to prevent
+  rays slipping through gaps between adjacent occupied cells
+  - occupancy_max_range param (default 2.5m): cells beyond range → -1
+* initial grid type adjustment
+* LRS-1181: Make TF tests robust to split /tf_static publishing (`#3535 <https://github.com/realsenseai/realsense-ros/issues/3535>`_)
+* cmake: add ROS 2 Lyrical to supported distros (`#3525 <https://github.com/realsenseai/realsense-ros/issues/3525>`_)
+* Merge branch 'ros2-development' into worktree-remove-mqtt
+* fix: track frame timestamp per-stream in HW clock mode (silences false reset warnings on DDS) (`#3531 <https://github.com/realsenseai/realsense-ros/issues/3531>`_)
+* Remove PID whitelist in startDevice (let librealsense gate which cameras are supported) (`#3532 <https://github.com/realsenseai/realsense-ros/issues/3532>`_)
+* fix: track previous frame timestamp per-stream to avoid false HW clock reset warnings
+  The hardware-clock branch of frameSystemTimeSec compared every incoming
+  frame's timestamp against a single shared _previous_frame_time. With
+  multi-stream sources (e.g. DDS devices, where frames are tagged with
+  RS2_TIMESTAMP_DOMAIN_HARDWARE_CLOCK), frames from different streams
+  running at different rates interleave out of order against that one
+  global value, triggering false "Hardware clock reset detected" warnings
+  and spurious time-base resets on nearly every frame.
+  Make _previous_frame_time a per-stream map keyed by the rs2 stream
+  unique_id, so each stream's monotonicity is checked only against itself.
+  On a real backward jump, clear the map so other streams re-seed silently
+  against the new time base on their next frame.
+  USB devices (GLOBAL_TIME domain) are unaffected — they don't enter this
+  branch.
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+* making ros wrapper work with all realsense cameras
+* Merge branch 'ros2-master' into patch-1
+* Contributors: Ilenia, Nir Azkiel, Nir-Az, Niv Goren, Remi Bettan, ileniap, remibettan
 
-* Update package.xml
-* Update package.xml
+* Freeze 4.58.4: bump version (`#3548 <https://github.com/realsenseai/realsense-ros/issues/3548>`_)
+* Update version to 4.58.4
+* Merge branch 'ros2-development' into ileniap/add/use-mesh/d455
+* Merge branch 'ros2-development' into patch-1
+* push ros2-master to ros2-development (`#3543 <https://github.com/realsenseai/realsense-ros/issues/3543>`_)
+* reset dev versions
+* Merge remote-tracking branch 'origin/ros2-master' into ros2-development
+* Ngoren/occupancy gridcells fix (`#3536 <https://github.com/realsenseai/realsense-ros/issues/3536>`_)
+* fix(occupancy): symmetric grid centering and review cleanups
+  - Center the grid about the camera axis with float cols/2 in both
+  origin.y and the per-cell y: the integer division shifted odd-column
+  grids (D585S emits 85 cols) half a cell laterally. Verified live:
+  origin.y now -2.975 and the grid aligns with the point cloud.
+  - Reject depth intrinsics with zero width, which would otherwise
+  publish a silent all-unknown grid.
+  - Stop the row scan at occupancy_max_range instead of skipping rows.
+  - Drop the unreachable bin < 0 guard, document why it cannot trigger.
+  - Rename bin_range to fov_span: it is the total FOV window, not the
+  width of one bin.
+  - Document occupancy_max_range in the README next to clip_distance.
+* occupancy: require depth intrinsics, drop no-FOV fallback
+* docs(occupancy): tighten comments
+* refine(occupancy): odd-column origin consistency, near-range spread guard, cast and perf cleanups
+* feat(occupancy): replace GridCells with OccupancyGrid, angular raycasting, FOV masking and max-range clipping
+  - Switch occupancy publisher from nav_msgs/GridCells to nav_msgs/OccupancyGrid
+  - Cell semantics: 0=free, 100=occupied, -1=unknown (was all-zero before)
+  - FOV masking: cells outside horizontal FOV cone (from depth camera fx) → -1
+  - True angular raycasting via θ=atan2(y,x) instead of fixed-Y column scan
+  - Shadow propagation: free until first obstacle, unknown behind it per ray
+  - Gap-ray fix: obstacle shadow spread across full angular footprint to prevent
+  rays slipping through gaps between adjacent occupied cells
+  - occupancy_max_range param (default 2.5m): cells beyond range → -1
+* initial grid type adjustment
+* LRS-1181: Make TF tests robust to split /tf_static publishing (`#3535 <https://github.com/realsenseai/realsense-ros/issues/3535>`_)
+* cmake: add ROS 2 Lyrical to supported distros (`#3525 <https://github.com/realsenseai/realsense-ros/issues/3525>`_)
+* Merge branch 'ros2-development' into worktree-remove-mqtt
+* fix: track frame timestamp per-stream in HW clock mode (silences false reset warnings on DDS) (`#3531 <https://github.com/realsenseai/realsense-ros/issues/3531>`_)
+* Remove PID whitelist in startDevice (let librealsense gate which cameras are supported) (`#3532 <https://github.com/realsenseai/realsense-ros/issues/3532>`_)
+* fix: track previous frame timestamp per-stream to avoid false HW clock reset warnings
+  The hardware-clock branch of frameSystemTimeSec compared every incoming
+  frame's timestamp against a single shared _previous_frame_time. With
+  multi-stream sources (e.g. DDS devices, where frames are tagged with
+  RS2_TIMESTAMP_DOMAIN_HARDWARE_CLOCK), frames from different streams
+  running at different rates interleave out of order against that one
+  global value, triggering false "Hardware clock reset detected" warnings
+  and spurious time-base resets on nearly every frame.
+  Make _previous_frame_time a per-stream map keyed by the rs2 stream
+  unique_id, so each stream's monotonicity is checked only against itself.
+  On a real backward jump, clear the map so other streams re-seed silently
+  against the new time base on their next frame.
+  USB devices (GLOBAL_TIME domain) are unaffected — they don't enter this
+  branch.
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+* making ros wrapper work with all realsense cameras
+* Merge branch 'ros2-master' into patch-1
+* Contributors: Ilenia, Nir Azkiel, Niv Goren, Remi Bettan, ileniap, remibettan
+
+4.58.3 (2026-07-20)
+-------------------
+* Push 4.58.3 release into ros2-master (`#3540 <https://github.com/IntelRealSense/realsense-ros/issues/3540>`_)
+* Fix image_transport::create_publisher for ROS2 Rolling (`#3541 <https://github.com/IntelRealSense/realsense-ros/issues/3541>`_)
+* Update package.xml  to version 4.58.3
+* Update constants.h to version 4.58.3
+* Merge master into ros2-development (4.58.2 release sync) (`#3529 <https://github.com/IntelRealSense/realsense-ros/issues/3529>`_)
+* Keep development versions after master merge (ROS 4.58.0, rgbd_plugin 0.1.0)
+* Merge remote-tracking branch 'origin/ros2-master' into ros2-development
+* Merge pull request `#3527 <https://github.com/IntelRealSense/realsense-ros/issues/3527>`_ from Nir-Az/fix-rosci-port-detection
+  rosci: route YKUSH control through rspy hub (drop direct ykushcmd)
+* rosci: skip YKUSH hub reset on first attempt to avoid ykushcmd USB-error spam
+* rosci: route YKUSH control through rspy hub, drop all ykushcmd calls
+* rosci: derive YKUSH port map from a single rspy query (no per-port toggling)
+* Merge pull request `#3526 <https://github.com/IntelRealSense/realsense-ros/issues/3526>`_ from Nir-Az/fix-device-name-prefix-parse
+  Make live-camera device-name parsing vendor-prefix-agnostic
+* Address review: use NAME_LINE_VALUE_OFFSET constant instead of literal 2
+* Remove Intel references from live-camera and mqtt-bridge test files
+* Make live-camera device-name parsing vendor-prefix-agnostic
+* Merge pull request `#3524 <https://github.com/IntelRealSense/realsense-ros/issues/3524>`_ from Nir-Az/fix-d555-name-match
+  Fix D555 DDS device detection to not depend on Intel name prefix
+* Merge remote-tracking branch 'origin/r/4.58.2' into ros2-master
+  # Conflicts:
+  #	realsense2_camera/CHANGELOG.rst
+  #	realsense2_camera/CMakeLists.txt
+  #	realsense2_camera_msgs/CHANGELOG.rst
+  #	realsense2_description/CHANGELOG.rst
+  #	realsense2_ros_mqtt_bridge/CHANGELOG.rst
+* Fix D555 DDS device detection to not depend on Intel name prefix
+* PR `#3501 <https://github.com/IntelRealSense/realsense-ros/issues/3501>`_ from Nir-Az: Push release 4.57.7 to master
+* Merge remote-tracking branch 'origin/r/4.57.7' into ros2-master
+* PR `#3482 <https://github.com/IntelRealSense/realsense-ros/issues/3482>`_ from Nir-Az: Push Release 4.57.6 to master
+* Merge remote-tracking branch 'origin/r/4.57.6' into ros2-master
+  # Conflicts:
+  #	realsense2_camera/include/constants.h
+  #	realsense2_camera/package.xml
+  #	realsense2_camera_msgs/package.xml
+  #	realsense2_description/package.xml
+  #	realsense2_ros_mqtt_bridge/package.xml
+  #	realsense2_ros_mqtt_bridge/setup.py
+* Update version in constants.h
+* Update CMakeLists.txt version
+* Update package.xml version
+* PR `#3477 <https://github.com/IntelRealSense/realsense-ros/issues/3477>`_ from Nir-Az: Push 4.57.4 release to ros2-master
 * Update constants.h
-* PR `#3485 <https://github.com/IntelRealSense/realsense-ros/issues/3485>`_ from Nir-Az: Fix GHA flow
-* install missing packages
-* PR `#3475 <https://github.com/IntelRealSense/realsense-ros/issues/3475>`_ from remibettan: find package set to last major release version
-* find package set to lrs prev major version 2
-* PR `#3474 <https://github.com/IntelRealSense/realsense-ros/issues/3474>`_ from remibettan: find package set to lrs prev major version
-* find package set to lrs prev major version
-* PR `#3462 <https://github.com/IntelRealSense/realsense-ros/issues/3462>`_ from remibettan: intel removed and github user changed
-* undoing the change in copyright, fixing bagfiles links
-* PR `#3468 <https://github.com/IntelRealSense/realsense-ros/issues/3468>`_ from remibettan: using legacy libraries for foxy
-* using legacy libraries for foxy
-* code review corrections
-* many intel removed and github user changed
-* PR `#3450 <https://github.com/IntelRealSense/realsense-ros/issues/3450>`_ from Nir-Az: update to realsenseai
-* update to realsenseai
-* PR `#3448 <https://github.com/IntelRealSense/realsense-ros/issues/3448>`_ from OhadMeir: Add motion_fps to launch file
-* Add motion_fps to launch file
-* PR `#3442 <https://github.com/IntelRealSense/realsense-ros/issues/3442>`_ from remibettan/restore-minor-version-to-0: minor versions back to 0
-* minor back to 0 - leftovers
-* minor back to 0
-* PR `#3441 <https://github.com/IntelRealSense/realsense-ros/issues/3441>`_ from remibettan/ros2-development: merging 4.57.3 to ros2-development
-* Merge tag '4.57.3' into ros2-development
-* PR `#3437 <https://github.com/IntelRealSense/realsense-ros/issues/3437>`_ from Gilaadb: bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
-* bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
-* Contributors: Gilad Bretter, Nir Azkiel, OhadMeir, Remi Bettan, remibettan
+* Merge remote-tracking branch 'origin/r/4.57.4' into ros2-master
+  # Conflicts:
+  #	README.md
+  #	realsense2_camera/CHANGELOG.rst
+  #	realsense2_camera/CMakeLists.txt
+  #	realsense2_camera/include/constants.h
+  #	realsense2_camera/package.xml
+  #	realsense2_camera_msgs/CHANGELOG.rst
+  #	realsense2_camera_msgs/package.xml
+  #	realsense2_description/CHANGELOG.rst
+  #	realsense2_description/package.xml
+* 4.57.4
+* changelogs updated
+* Update realsense2_camera package.xml to 4.57.4
+* PR `#3400 <https://github.com/IntelRealSense/realsense-ros/issues/3400>`_ from Nir-Az: Fix releases dependencies
+* remove strict requirement
+* PR `#3374 <https://github.com/IntelRealSense/realsense-ros/issues/3374>`_ from remibettan: kilted added to wrapper
+  (cherry picked from commit 01c054b352e3b0019460347b73579726114b0404)
+  # Conflicts:
+  #	.github/workflows/main.yml
+* PR `#3399 <https://github.com/IntelRealSense/realsense-ros/issues/3399>`_ from IntelRealSense: Push r/4.56.4 to master
+* PR `#3398 <https://github.com/IntelRealSense/realsense-ros/issues/3398>`_ from ashrafk93: R/4.56.4
+* 4.56.4
+* bump version to 4.56.4
+* PR `#3329 <https://github.com/IntelRealSense/realsense-ros/issues/3329>`_ from Nir-Az: Update version to 4.56.4
+* update version to 4.56.4
+* PR `#3148 <https://github.com/IntelRealSense/realsense-ros/issues/3148>`_ from SamerKhshiboun: update READMEs and CONTRIBUTING files regarding ros2-master
+* update READMEs and CONTRIBUTING files regarding ros2-master
+* Update CMakeLists.txt
+* Contributors: Ashraf Kattoura, Nir Azkiel, Remi Bettan, Samer Khshiboun, SamerKhshiboun, remibettan
 
 4.58.2 (2026-06-15)
 -------------------
@@ -174,6 +335,40 @@ Changelog for package realsense2_camera
 * PR `#3437 <https://github.com/IntelRealSense/realsense-ros/issues/3437>`_ from Gilaadb: bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
 * bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
 * Contributors: Avia Avraham, Gilad Bretter, Nandini, Nandini Thakur, Nir Azkiel, OhadMeir, Remi Bettan, remibettan
+
+4.57.8 (2026-03-27)
+-------------------
+
+4.57.7 (2026-03-24)
+-------------------
+* add release noted
+* Update package.xml
+* Update package.xml
+* Update constants.h
+* PR `#3485 <https://github.com/IntelRealSense/realsense-ros/issues/3485>`_ from Nir-Az: Fix GHA flow
+* install missing packages
+* PR `#3475 <https://github.com/IntelRealSense/realsense-ros/issues/3475>`_ from remibettan: find package set to last major release version
+* find package set to lrs prev major version 2
+* PR `#3474 <https://github.com/IntelRealSense/realsense-ros/issues/3474>`_ from remibettan: find package set to lrs prev major version
+* find package set to lrs prev major version
+* PR `#3462 <https://github.com/IntelRealSense/realsense-ros/issues/3462>`_ from remibettan: intel removed and github user changed
+* undoing the change in copyright, fixing bagfiles links
+* PR `#3468 <https://github.com/IntelRealSense/realsense-ros/issues/3468>`_ from remibettan: using legacy libraries for foxy
+* using legacy libraries for foxy
+* code review corrections
+* many intel removed and github user changed
+* PR `#3450 <https://github.com/IntelRealSense/realsense-ros/issues/3450>`_ from Nir-Az: update to realsenseai
+* update to realsenseai
+* PR `#3448 <https://github.com/IntelRealSense/realsense-ros/issues/3448>`_ from OhadMeir: Add motion_fps to launch file
+* Add motion_fps to launch file
+* PR `#3442 <https://github.com/IntelRealSense/realsense-ros/issues/3442>`_ from remibettan/restore-minor-version-to-0: minor versions back to 0
+* minor back to 0 - leftovers
+* minor back to 0
+* PR `#3441 <https://github.com/IntelRealSense/realsense-ros/issues/3441>`_ from remibettan/ros2-development: merging 4.57.3 to ros2-development
+* Merge tag '4.57.3' into ros2-development
+* PR `#3437 <https://github.com/IntelRealSense/realsense-ros/issues/3437>`_ from Gilaadb: bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
+* bug fix(rs_node_setup): Fix topic names that were improperly marked as rect (rectified)
+* Contributors: Gilad Bretter, Nir Azkiel, OhadMeir, Remi Bettan, remibettan
 
 4.57.3 (2025-09-15)
 -------------------
